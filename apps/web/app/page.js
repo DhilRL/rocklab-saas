@@ -55,7 +55,7 @@ export default function HomePage() {
           Rocklab SaaS
         </p>
         <h1 className="mt-6 max-w-4xl text-4xl font-semibold leading-tight md:text-6xl">
-          Professional manpower tracking system for gyms, cafés, and small businesses.
+          Professional manpower tracking system for gyms, cafés, and small businesses at every stage.
         </h1>
         <p className="mt-6 max-w-3xl text-lg text-zinc-300">
           Manage shifts, attendance, payroll acknowledgment, and team accountability in one modern
