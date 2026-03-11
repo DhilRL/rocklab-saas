@@ -1,0 +1,8 @@
+{
+  "/page": "app/page.js",
+  "/create-org/page": "app/create-org/page.js",
+  "/login/page": "app/login/page.js",
+  "/org/[orgSlug]/dashboard/page": "app/org/[orgSlug]/dashboard/page.js",
+  "/org/[orgSlug]/schedule/page": "app/org/[orgSlug]/schedule/page.js",
+  "/org/[orgSlug]/settings/page": "app/org/[orgSlug]/settings/page.js"
+}

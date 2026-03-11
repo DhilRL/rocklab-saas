@@ -1,210 +1,419 @@
-/**
- * Rocklab SaaS - Backend Logic
- * Core functions for Org Management, Invites, and Onboarding.
- */
-
 import { setGlobalOptions } from "firebase-functions/v2";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 
-// Initialize Firebase Admin (Required for Database access)
 admin.initializeApp();
 const db = admin.firestore();
 
-// Global Settings (Gen 2)
 setGlobalOptions({ maxInstances: 10, region: "us-central1" });
 
-// --- Interfaces ---
+type OrgMemberRecord = {
+  id: string;
+  orgId?: string;
+  uid?: string;
+  email?: string;
+  role?: string;
+  status?: string;
+  fullName?: string;
+  phone?: string;
+  nickname?: string;
+  telegramId?: string;
+  photoUrl?: string;
+  [key: string]: any;
+};
 
-interface CreateOrgData {
-  name: string;
-  slug: string;
-}
-
-interface CreateInviteData {
-  orgId: string;
-  email: string;
-  role: 'admin' | 'staff';
-}
-
-interface AcceptInviteData {
-  inviteId: string;
-}
-
-interface OnboardingData {
-  orgId: string;
-  fullName: string;
-  phone: string;
-}
-
-interface ApproveMemberData {
-  orgId: string;
-  memberId: string;
-}
-
-// --- 1. Create Organization ---
-// Trigger: User signs up and creates their first workspace.
-// Action: Creates Org doc + sets User as "owner" in orgMembers.
-export const createOrg = onCall<CreateOrgData>(async (request) => {
+function requireAuth(request: any) {
   if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'User must be logged in.');
+    throw new HttpsError("unauthenticated", "Login required");
+  }
+  return request.auth;
+}
+
+async function getOrgMember(
+  orgId: string,
+  uid: string,
+  email?: string
+): Promise<OrgMemberRecord | null> {
+  const deterministicRef = db.collection("orgMembers").doc(`${orgId}_${uid}`);
+  const deterministicSnap = await deterministicRef.get();
+
+  if (deterministicSnap.exists) {
+    return {
+      id: deterministicSnap.id,
+      ...(deterministicSnap.data() || {}),
+    } as OrgMemberRecord;
   }
 
-  const { name, slug } = request.data;
-  const uid = request.auth.uid;
-  const email = request.auth.token.email || "";
+  const byUidSnap = await db
+    .collection("orgMembers")
+    .where("orgId", "==", orgId)
+    .where("uid", "==", uid)
+    .limit(1)
+    .get();
 
-  if (!name || !slug) {
-    throw new HttpsError('invalid-argument', 'Organization name and slug are required.');
+  if (!byUidSnap.empty) {
+    const memberDoc = byUidSnap.docs[0];
+    return {
+      id: memberDoc.id,
+      ...(memberDoc.data() || {}),
+    } as OrgMemberRecord;
   }
 
-  // 1. Create the Organization Document
-  const orgRef = db.collection('orgs').doc();
-  const orgId = orgRef.id;
+  if (email) {
+    const cleanEmail = String(email).toLowerCase().trim();
 
-  await orgRef.set({
-    id: orgId,
-    name: name,
-    slug: slug, // In production, check for uniqueness first!
-    ownerId: uid,
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    status: 'active'
-  });
+    const byEmailSnap = await db
+      .collection("orgMembers")
+      .where("orgId", "==", orgId)
+      .where("email", "==", cleanEmail)
+      .limit(1)
+      .get();
 
-  // 2. Add Creator as the First Member (Owner)
-  await db.collection('orgMembers').doc(`${orgId}_${uid}`).set({
-    orgId: orgId,
-    uid: uid,
-    email: email,
-    role: 'owner',
-    status: 'active',
-    joinedAt: admin.firestore.FieldValue.serverTimestamp()
-  });
-
-  return { success: true, orgId: orgId };
-});
-
-// --- 2. Create Invite ---
-// Trigger: Admin invites a staff member via email.
-// Action: Creates an "Invite" document. (Email triggering would happen via a separate background function)
-export const createInvite = onCall<CreateInviteData>(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'Must be logged in to invite.');
+    if (!byEmailSnap.empty) {
+      const memberDoc = byEmailSnap.docs[0];
+      return {
+        id: memberDoc.id,
+        ...(memberDoc.data() || {}),
+      } as OrgMemberRecord;
+    }
   }
+
+  return null;
+}
+
+async function assertCanManageOrg(orgId: string, uid: string, email?: string) {
+  const orgSnap = await db.collection("orgs").doc(orgId).get();
+
+  if (!orgSnap.exists) {
+    throw new HttpsError("not-found", "Organization not found");
+  }
+
+  const org = orgSnap.data();
+
+  if (org?.ownerUid === uid) return org;
+
+  const member = await getOrgMember(orgId, uid, email);
+  const role = String(member?.role || "staff").toLowerCase();
+
+  if (!["owner", "admin", "manager"].includes(role)) {
+    throw new HttpsError(
+      "permission-denied",
+      "You do not have permission to manage shifts"
+    );
+  }
+
+  return org;
+}
+
+export const createInvite = onCall({ cors: true }, async (request) => {
+  const auth = requireAuth(request);
 
   const { orgId, email, role } = request.data;
+  const uid = auth.uid;
+  const cleanEmail = String(email || "").trim().toLowerCase();
 
-  // Security: Check if requester is Admin/Owner of this Org
-  const requesterMembership = await db.collection('orgMembers').doc(`${orgId}_${request.auth.uid}`).get();
-  if (!requesterMembership.exists || !['owner', 'admin'].includes(requesterMembership.data()?.role)) {
-    throw new HttpsError('permission-denied', 'Only Admins can invite users.');
+  if (!orgId || !cleanEmail || !role) {
+    throw new HttpsError(
+      "invalid-argument",
+      "orgId, email and role are required"
+    );
   }
 
-  // Create Invite Doc
-  const inviteRef = await db.collection('invites').add({
+  const existingInviteSnap = await db
+    .collection("invites")
+    .where("orgId", "==", orgId)
+    .where("email", "==", cleanEmail)
+    .where("status", "==", "pending")
+    .get();
+
+  if (!existingInviteSnap.empty) {
+    throw new HttpsError(
+      "already-exists",
+      "A pending invite already exists for this email"
+    );
+  }
+
+  const inviteRef = db.collection("invites").doc();
+
+  await inviteRef.set({
     orgId,
-    email,
+    email: cleanEmail,
     role,
-    invitedBy: request.auth.uid,
-    status: 'pending',
-    createdAt: admin.firestore.FieldValue.serverTimestamp()
+    invitedBy: uid,
+    status: "pending",
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
-  return { success: true, inviteId: inviteRef.id };
+  return { inviteId: inviteRef.id };
 });
 
-// --- 3. Accept Invite ---
-// Trigger: User clicks link in email, lands on page, clicks "Accept".
-// Action: Verifies invite, creates Member record, deletes Invite.
-export const acceptInvite = onCall<AcceptInviteData>(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'Please sign in to accept invitation.');
-  }
+export const acceptInvite = onCall({ cors: true }, async (request) => {
+  const auth = requireAuth(request);
 
   const { inviteId } = request.data;
-  const uid = request.auth.uid;
-  const email = request.auth.token.email;
+  const uid = auth.uid;
+  const email = String(auth.token.email || "").toLowerCase().trim();
 
-  // 1. Fetch Invite
-  const inviteRef = db.collection('invites').doc(inviteId);
-  const inviteSnap = await inviteRef.get();
+  if (!inviteId) {
+    throw new HttpsError("invalid-argument", "inviteId is required");
+  }
 
+  const inviteSnap = await db.collection("invites").doc(inviteId).get();
   if (!inviteSnap.exists) {
-    throw new HttpsError('not-found', 'Invitation not found or expired.');
+    throw new HttpsError("not-found", "Invite not found");
   }
 
-  const inviteData = inviteSnap.data();
+  const invite = inviteSnap.data();
 
-  // 2. Validate Email matches (Optional security check)
-  if (inviteData?.email !== email) {
-     throw new HttpsError('permission-denied', 'This invite was sent to a different email address.');
+  if (!invite) {
+    throw new HttpsError("not-found", "Invite not found");
   }
 
-  // 3. Create Member Record (Status: pending onboarding)
-  await db.collection('orgMembers').doc(`${inviteData?.orgId}_${uid}`).set({
-    orgId: inviteData?.orgId,
-    uid: uid,
-    email: email,
-    role: inviteData?.role,
-    status: 'pending_onboarding', // Needs to fill profile
-    joinedAt: admin.firestore.FieldValue.serverTimestamp()
+  if ((invite.email || "").toLowerCase().trim() !== email) {
+    throw new HttpsError(
+      "permission-denied",
+      "This invite does not belong to this account"
+    );
+  }
+
+  await db.collection("orgMembers").doc(`${invite.orgId}_${uid}`).set({
+    orgId: invite.orgId,
+    uid,
+    email,
+    role: invite.role,
+    status: "pending_onboarding",
+    joinedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
-  // 4. Delete/Mark Invite Used
-  await inviteRef.delete();
+  await db.collection("invites").doc(inviteId).update({
+    status: "accepted",
+    acceptedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
 
-  return { success: true, orgId: inviteData?.orgId };
+  return { orgId: invite.orgId };
 });
 
-// --- 4. Submit Onboarding ---
-// Trigger: Staff fills out their name/phone after accepting invite.
-// Action: Updates Member profile, moves status to "active" (or "pending_approval" if strict).
-export const submitOnboarding = onCall<OnboardingData>(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'Authentication required.');
-  }
+export const submitOnboarding = onCall({ cors: true }, async (request) => {
+  const auth = requireAuth(request);
 
   const { orgId, fullName, phone } = request.data;
-  const uid = request.auth.uid;
+  const uid = auth.uid;
+  const email = String(auth.token.email || "").toLowerCase().trim();
 
-  const memberRef = db.collection('orgMembers').doc(`${orgId}_${uid}`);
-  const memberSnap = await memberRef.get();
-
-  if (!memberSnap.exists) {
-    throw new HttpsError('permission-denied', 'Member record not found.');
+  if (!orgId) {
+    throw new HttpsError("invalid-argument", "orgId is required");
   }
 
-  await memberRef.update({
-    fullName,
-    phone,
-    status: 'active', // Or 'pending_approval' if you want a manual check
-    onboardedAt: admin.firestore.FieldValue.serverTimestamp()
+  const deterministicRef = db.collection("orgMembers").doc(`${orgId}_${uid}`);
+  const deterministicSnap = await deterministicRef.get();
+
+  if (deterministicSnap.exists) {
+    await deterministicRef.update({
+      fullName: String(fullName || "").trim(),
+      phone: String(phone || "").trim(),
+      status: "active",
+    });
+
+    return { success: true };
+  }
+
+  const member = await getOrgMember(orgId, uid, email);
+
+  if (!member?.id) {
+    throw new HttpsError("not-found", "Member record not found");
+  }
+
+  await db.collection("orgMembers").doc(member.id).update({
+    fullName: String(fullName || "").trim(),
+    phone: String(phone || "").trim(),
+    status: "active",
   });
 
   return { success: true };
 });
 
-// --- 5. Approve Member (Optional) ---
-// Trigger: Admin approves a pending staff member.
-export const approveMember = onCall<ApproveMemberData>(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'Authentication required.');
+export const createShift = onCall({ cors: true }, async (request) => {
+  const auth = requireAuth(request);
+
+  const {
+    orgId,
+    title,
+    shiftType,
+    startIso,
+    endIso,
+    isAvailable,
+    assignedStaffIds = [],
+    assignedStaffNames = [],
+    notes = "",
+    color = "blue",
+  } = request.data;
+
+  if (!orgId || !title || !startIso || !endIso) {
+    throw new HttpsError(
+      "invalid-argument",
+      "orgId, title, startIso and endIso are required"
+    );
   }
 
-  const { orgId, memberId } = request.data; // memberId is the UID of the staff
+  await assertCanManageOrg(orgId, auth.uid, auth.token.email);
 
-  // Security Check
-  const requesterSnap = await db.collection('orgMembers').doc(`${orgId}_${request.auth.uid}`).get();
-  if (!requesterSnap.exists || !['owner', 'admin'].includes(requesterSnap.data()?.role)) {
-    throw new HttpsError('permission-denied', 'Not authorized.');
+  const start = admin.firestore.Timestamp.fromDate(new Date(startIso));
+  const end = admin.firestore.Timestamp.fromDate(new Date(endIso));
+
+  if (Number.isNaN(start.toMillis()) || Number.isNaN(end.toMillis())) {
+    throw new HttpsError("invalid-argument", "Invalid shift date/time");
   }
 
-  await db.collection('orgMembers').doc(`${orgId}_${memberId}`).update({
-    status: 'active',
-    approvedAt: admin.firestore.FieldValue.serverTimestamp(),
-    approvedBy: request.auth.uid
+  if (end.toMillis() <= start.toMillis()) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Shift end must be after shift start"
+    );
+  }
+
+  const shiftRef = db.collection("orgShifts").doc();
+
+  await shiftRef.set({
+    orgId,
+    title: String(title).trim(),
+    shiftType: String(shiftType || "").trim(),
+    start,
+    end,
+    isAvailable: Boolean(isAvailable),
+    assignedStaffIds: Array.isArray(assignedStaffIds) ? assignedStaffIds : [],
+    assignedStaffNames: Array.isArray(assignedStaffNames)
+      ? assignedStaffNames
+      : [],
+    notes: String(notes || "").trim(),
+    color: String(color || "blue"),
+    createdBy: auth.uid,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return { shiftId: shiftRef.id };
+});
+
+export const updateShift = onCall({ cors: true }, async (request) => {
+  const auth = requireAuth(request);
+
+  const {
+    shiftId,
+    orgId,
+    title,
+    shiftType,
+    startIso,
+    endIso,
+    isAvailable,
+    assignedStaffIds = [],
+    assignedStaffNames = [],
+    notes = "",
+    color = "blue",
+  } = request.data;
+
+  if (!shiftId || !orgId || !title || !startIso || !endIso) {
+    throw new HttpsError(
+      "invalid-argument",
+      "shiftId, orgId, title, startIso and endIso are required"
+    );
+  }
+
+  await assertCanManageOrg(orgId, auth.uid, auth.token.email);
+
+  const start = admin.firestore.Timestamp.fromDate(new Date(startIso));
+  const end = admin.firestore.Timestamp.fromDate(new Date(endIso));
+
+  if (Number.isNaN(start.toMillis()) || Number.isNaN(end.toMillis())) {
+    throw new HttpsError("invalid-argument", "Invalid shift date/time");
+  }
+
+  if (end.toMillis() <= start.toMillis()) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Shift end must be after shift start"
+    );
+  }
+
+  await db.collection("orgShifts").doc(shiftId).update({
+    title: String(title).trim(),
+    shiftType: String(shiftType || "").trim(),
+    start,
+    end,
+    isAvailable: Boolean(isAvailable),
+    assignedStaffIds: Array.isArray(assignedStaffIds) ? assignedStaffIds : [],
+    assignedStaffNames: Array.isArray(assignedStaffNames)
+      ? assignedStaffNames
+      : [],
+    notes: String(notes || "").trim(),
+    color: String(color || "blue"),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
   return { success: true };
+});
+
+export const deleteShift = onCall({ cors: true }, async (request) => {
+  const auth = requireAuth(request);
+  const { shiftId } = request.data;
+
+  if (!shiftId) {
+    throw new HttpsError("invalid-argument", "shiftId is required");
+  }
+
+  const shiftSnap = await db.collection("orgShifts").doc(shiftId).get();
+  if (!shiftSnap.exists) {
+    throw new HttpsError("not-found", "Shift not found");
+  }
+
+  const shift = shiftSnap.data();
+  await assertCanManageOrg(shift?.orgId, auth.uid, auth.token.email);
+
+  await db.collection("orgShifts").doc(shiftId).delete();
+
+  return { success: true };
+});
+
+export const duplicateShift = onCall({ cors: true }, async (request) => {
+  const auth = requireAuth(request);
+  const { shiftId } = request.data;
+
+  if (!shiftId) {
+    throw new HttpsError("invalid-argument", "shiftId is required");
+  }
+
+  const shiftSnap = await db.collection("orgShifts").doc(shiftId).get();
+  if (!shiftSnap.exists) {
+    throw new HttpsError("not-found", "Shift not found");
+  }
+
+  const shift = shiftSnap.data();
+  if (!shift) {
+    throw new HttpsError("not-found", "Shift not found");
+  }
+
+  await assertCanManageOrg(shift.orgId, auth.uid, auth.token.email);
+
+  const durationMs =
+    shift.end.toDate().getTime() - shift.start.toDate().getTime();
+
+  const duplicatedStart = admin.firestore.Timestamp.fromDate(
+    new Date(shift.start.toDate().getTime() + 24 * 60 * 60 * 1000)
+  );
+
+  const duplicatedEnd = admin.firestore.Timestamp.fromDate(
+    new Date(duplicatedStart.toDate().getTime() + durationMs)
+  );
+
+  const newShiftRef = db.collection("orgShifts").doc();
+
+  await newShiftRef.set({
+    ...shift,
+    start: duplicatedStart,
+    end: duplicatedEnd,
+    createdBy: auth.uid,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return { shiftId: newShiftRef.id };
 });
