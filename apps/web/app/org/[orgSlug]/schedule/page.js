@@ -14,7 +14,7 @@ import {
   subMonths,
 } from "date-fns";
 import { httpsCallable } from "firebase/functions";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, doc, getDocs, query, updateDoc, where } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db, functions } from "../../../../lib/firebase";
 
@@ -315,6 +315,189 @@ function getShiftTypeById(shiftTypes, id) {
   return shiftTypes.find((type) => type.id === id) || null;
 }
 
+function getMonthKey(date) {
+  return format(date, "yyyy-MM");
+}
+
+function emptyQuickAddTemplate(shiftTypes = []) {
+  const firstShiftType = shiftTypes[0] || null;
+
+  return {
+    name: "Default Month Template",
+    title: firstShiftType?.name || "Open Shift",
+    shiftTypeId: firstShiftType?.id || "",
+    startTime: "09:00",
+    endTime: "17:00",
+    isAvailable: true,
+    weekdays: [1, 2, 3, 4, 5],
+  };
+}
+
+function QuickAddTemplateModal({
+  open,
+  template,
+  setTemplate,
+  onClose,
+  onApply,
+  saving,
+  shiftTypes,
+}) {
+  if (!open) return null;
+
+  const weekdayOptions = [
+    { label: "Sun", value: 0 },
+    { label: "Mon", value: 1 },
+    { label: "Tue", value: 2 },
+    { label: "Wed", value: 3 },
+    { label: "Thu", value: 4 },
+    { label: "Fri", value: 5 },
+    { label: "Sat", value: 6 },
+  ];
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(15, 23, 42, 0.45)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 9999,
+        padding: 20,
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 620,
+          background: "#ffffff",
+          borderRadius: 18,
+          border: "1px solid #e5e7eb",
+          boxShadow: "0 20px 60px rgba(15, 23, 42, 0.18)",
+          padding: 20,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 style={{ marginTop: 0 }}>Bulk Quick Add Template</h2>
+        <p style={{ marginTop: 4, color: "#6b7280" }}>
+          Save a named template and bulk-create shifts for the month you are viewing.
+        </p>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
+          <div style={{ display: "grid", gap: 6, gridColumn: "1 / -1" }}>
+            <label style={{ fontWeight: 600 }}>Template Name</label>
+            <input
+              value={template.name}
+              onChange={(e) => setTemplate((prev) => ({ ...prev, name: e.target.value }))}
+              placeholder="e.g. Weekday Openers"
+            />
+          </div>
+
+          <div style={{ display: "grid", gap: 6 }}>
+            <label style={{ fontWeight: 600 }}>Shift Title</label>
+            <input
+              value={template.title}
+              onChange={(e) => setTemplate((prev) => ({ ...prev, title: e.target.value }))}
+            />
+          </div>
+
+          <div style={{ display: "grid", gap: 6 }}>
+            <label style={{ fontWeight: 600 }}>Shift Type</label>
+            <select
+              value={template.shiftTypeId}
+              onChange={(e) => setTemplate((prev) => ({ ...prev, shiftTypeId: e.target.value }))}
+            >
+              <option value="">Select shift type</option>
+              {shiftTypes.map((type) => (
+                <option key={type.id} value={type.id}>
+                  {type.icon || "🧩"} {type.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: "grid", gap: 6 }}>
+            <label style={{ fontWeight: 600 }}>Start Time</label>
+            <input
+              type="time"
+              value={template.startTime}
+              onChange={(e) => setTemplate((prev) => ({ ...prev, startTime: e.target.value }))}
+            />
+          </div>
+
+          <div style={{ display: "grid", gap: 6 }}>
+            <label style={{ fontWeight: 600 }}>End Time</label>
+            <input
+              type="time"
+              value={template.endTime}
+              onChange={(e) => setTemplate((prev) => ({ ...prev, endTime: e.target.value }))}
+            />
+          </div>
+        </div>
+
+        <div style={{ marginTop: 16 }}>
+          <label style={{ fontWeight: 600, display: "block", marginBottom: 8 }}>
+            Apply on weekdays
+          </label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {weekdayOptions.map((option) => {
+              const checked = template.weekdays.includes(option.value);
+
+              return (
+                <label
+                  key={option.value}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    border: "1px solid #cbd5e1",
+                    borderRadius: 999,
+                    padding: "6px 10px",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) =>
+                      setTemplate((prev) => ({
+                        ...prev,
+                        weekdays: e.target.checked
+                          ? [...prev.weekdays, option.value].sort((a, b) => a - b)
+                          : prev.weekdays.filter((day) => day !== option.value),
+                      }))
+                    }
+                  />
+                  {option.label}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        <label style={{ display: "inline-flex", marginTop: 16, alignItems: "center", gap: 8 }}>
+          <input
+            type="checkbox"
+            checked={template.isAvailable}
+            onChange={(e) => setTemplate((prev) => ({ ...prev, isAvailable: e.target.checked }))}
+          />
+          Create as available shifts
+        </label>
+
+        <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end", gap: 10 }}>
+          <button className="btn btn-secondary" type="button" onClick={onClose} disabled={saving}>
+            Cancel
+          </button>
+          <button className="btn btn-primary" type="button" onClick={onApply} disabled={saving}>
+            {saving ? "Adding..." : "Save Template & Add to Month"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SchedulePage({ params }) {
   const { orgSlug } = params;
 
@@ -328,6 +511,9 @@ export default function SchedulePage({ params }) {
   const [showMineOnly, setShowMineOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingShift, setSavingShift] = useState(false);
+  const [savingQuickAdd, setSavingQuickAdd] = useState(false);
+  const [quickAddModalOpen, setQuickAddModalOpen] = useState(false);
+  const [quickAddTemplate, setQuickAddTemplate] = useState(emptyQuickAddTemplate());
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState("create");
@@ -336,6 +522,17 @@ export default function SchedulePage({ params }) {
 
   const weekStartsOn = org?.weekStart === "sunday" ? 0 : 1;
   const shiftTypes = org?.shiftTypes || [];
+  const currentMonthKey = getMonthKey(anchorDate);
+  const monthBiddingOpen = Boolean(org?.biddingMonths?.[currentMonthKey]);
+  const canManageSchedule =
+    Boolean(user?.uid) &&
+    (org?.ownerUid === user.uid ||
+      members.some(
+        (m) =>
+          (m.uid === user.uid ||
+            (m.email && user?.email && m.email.toLowerCase() === String(user.email).toLowerCase())) &&
+          ["owner", "admin", "manager"].includes(String(m.role || "").toLowerCase())
+      ));
 
   const createShiftFn = httpsCallable(functions, "createShift");
   const updateShiftFn = httpsCallable(functions, "updateShift");
@@ -386,6 +583,15 @@ export default function SchedulePage({ params }) {
 
     setShifts(shiftRows);
     setForm(emptyForm(memberRows, orgData.shiftTypes || []));
+    setQuickAddTemplate((prev) => {
+      const fallback = emptyQuickAddTemplate(orgData.shiftTypes || []);
+      return {
+        ...fallback,
+        ...prev,
+        shiftTypeId: prev.shiftTypeId || fallback.shiftTypeId,
+        title: prev.title || fallback.title,
+      };
+    });
     setUser(currentUser);
   }
 
@@ -652,6 +858,106 @@ export default function SchedulePage({ params }) {
     }
   }
 
+  async function handleToggleMonthBidding() {
+    if (!org?.id || !canManageSchedule) return;
+
+    try {
+      const nextValue = !monthBiddingOpen;
+      await updateDoc(doc(db, "orgs", org.id), {
+        [`biddingMonths.${currentMonthKey}`]: nextValue,
+      });
+
+      setOrg((prev) => ({
+        ...prev,
+        biddingMonths: {
+          ...(prev?.biddingMonths || {}),
+          [currentMonthKey]: nextValue,
+        },
+      }));
+    } catch (err) {
+      console.error(err);
+      alert(err?.message || "Failed to update bidding status.");
+    }
+  }
+
+  async function handleQuickAddToMonth() {
+    if (!org?.id) return;
+
+    const title = String(quickAddTemplate.title || "").trim();
+    if (!title) {
+      alert("Add Quick needs a shift title.");
+      return;
+    }
+    if (!quickAddTemplate.shiftTypeId) {
+      alert("Add Quick needs a shift type.");
+      return;
+    }
+    if (!quickAddTemplate.startTime || !quickAddTemplate.endTime) {
+      alert("Add Quick needs a start and end time.");
+      return;
+    }
+    if (!quickAddTemplate.weekdays.length) {
+      alert("Add Quick needs at least one weekday selected.");
+      return;
+    }
+
+    const monthStart = startOfMonth(anchorDate);
+    const monthEnd = endOfMonth(anchorDate);
+    const daysToCreate = [];
+    let cursor = new Date(monthStart);
+
+    while (cursor <= monthEnd) {
+      if (quickAddTemplate.weekdays.includes(cursor.getDay())) {
+        daysToCreate.push(new Date(cursor));
+      }
+      cursor = addDays(cursor, 1);
+    }
+
+    if (!daysToCreate.length) {
+      alert("No matching days found in this month for your template.");
+      return;
+    }
+
+    try {
+      setSavingQuickAdd(true);
+
+      await Promise.all(
+        daysToCreate.map(async (day) => {
+          const start = combineDateAndTime(
+            toLocalDateInputValue(day),
+            quickAddTemplate.startTime
+          );
+          const end = combineDateAndTime(
+            toLocalDateInputValue(day),
+            quickAddTemplate.endTime
+          );
+
+          if (!start || !end || end <= start) return;
+
+          await createShiftFn({
+            orgId: org.id,
+            title,
+            shiftType: quickAddTemplate.shiftTypeId,
+            startIso: start.toISOString(),
+            endIso: end.toISOString(),
+            isAvailable: quickAddTemplate.isAvailable,
+            assignedStaffIds: [],
+            assignedStaffNames: [],
+            notes: `Quick add template: ${String(quickAddTemplate.name || "Untitled template").trim()}`,
+          });
+        })
+      );
+
+      await loadOrgData(user);
+      setQuickAddModalOpen(false);
+    } catch (err) {
+      console.error(err);
+      alert(err?.message || "Failed to quick add shifts for the month.");
+    } finally {
+      setSavingQuickAdd(false);
+    }
+  }
+
   if (loading) {
     return <div>Loading schedule...</div>;
   }
@@ -669,23 +975,64 @@ export default function SchedulePage({ params }) {
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button className="btn btn-secondary" onClick={() => setAnchorDate(subMonths(anchorDate, 1))}>
-            Previous
-          </button>
           <button className="btn btn-secondary" onClick={() => setAnchorDate(new Date())}>
             Today
-          </button>
-          <button className="btn btn-secondary" onClick={() => setAnchorDate(addMonths(anchorDate, 1))}>
-            Next
-          </button>
-          <button className="btn btn-primary" onClick={() => openCreateModal(new Date())}>
-            Add Shift
           </button>
         </div>
       </div>
 
       <div style={{ marginBottom: 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-        <div style={{ fontSize: 22, fontWeight: 800 }}>{format(anchorDate, "MMMM yyyy")}</div>
+        <button className="btn btn-secondary" onClick={() => setAnchorDate(subMonths(anchorDate, 1))}>
+          Previous
+        </button>
+        <select
+          value={anchorDate.getMonth()}
+          onChange={(e) => {
+            const next = new Date(anchorDate);
+            next.setMonth(Number(e.target.value), 1);
+            setAnchorDate(next);
+          }}
+        >
+          {Array.from({ length: 12 }, (_, monthIndex) => (
+            <option key={monthIndex} value={monthIndex}>
+              {format(new Date(2024, monthIndex, 1), "MMMM")}
+            </option>
+          ))}
+        </select>
+        <input
+          type="number"
+          min={2000}
+          max={2100}
+          value={anchorDate.getFullYear()}
+          onChange={(e) => {
+            const next = new Date(anchorDate);
+            next.setFullYear(Number(e.target.value || new Date().getFullYear()));
+            setAnchorDate(next);
+          }}
+          style={{ width: 96 }}
+        />
+        <button className="btn btn-secondary" onClick={() => setAnchorDate(addMonths(anchorDate, 1))}>
+          Next
+        </button>
+
+        <div style={{ fontSize: 22, fontWeight: 800, marginLeft: 8 }}>{format(anchorDate, "MMMM yyyy")}</div>
+
+        {canManageSchedule ? (
+          <button className="btn btn-secondary" onClick={handleToggleMonthBidding}>
+            {monthBiddingOpen ? "Close Bidding" : "Open Bidding"}
+          </button>
+        ) : null}
+
+        {canManageSchedule ? (
+          <>
+            <button className="btn btn-primary" onClick={handleQuickAddToMonth} disabled={savingQuickAdd}>
+              {savingQuickAdd ? "Adding..." : "Add Quick"}
+            </button>
+            <button className="btn btn-secondary" onClick={() => setQuickAddModalOpen(true)}>
+              Bulk Template
+            </button>
+          </>
+        ) : null}
 
         <div style={{ display: "flex", gap: 8 }}>
           <button
@@ -928,6 +1275,16 @@ export default function SchedulePage({ params }) {
         onDuplicate={handleDuplicateShift}
         onDelete={handleDeleteShift}
         saving={savingShift}
+      />
+
+      <QuickAddTemplateModal
+        open={quickAddModalOpen}
+        template={quickAddTemplate}
+        setTemplate={setQuickAddTemplate}
+        onClose={() => setQuickAddModalOpen(false)}
+        onApply={handleQuickAddToMonth}
+        saving={savingQuickAdd}
+        shiftTypes={shiftTypes}
       />
     </>
   );
