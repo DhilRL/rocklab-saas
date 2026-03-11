@@ -198,6 +198,8 @@ export default function SettingsPage({ params }) {
     return rankKeys.length ? rankKeys : DEFAULT_RANK_OPTIONS;
   }, [payrollSettings]);
 
+  const showMilestonesForRankForm = payrollSettings.payModel !== "rank_only";
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
@@ -529,14 +531,16 @@ export default function SettingsPage({ params }) {
       return;
     }
 
-    const normalizedMilestones = sortMilestones(
-      (rankForm.milestones || [])
-        .filter((m) => m.minHours !== "" && m.rate !== "")
-        .map((m) => ({
-          minHours: Number(m.minHours),
-          rate: Number(m.rate),
-        }))
-    );
+    const normalizedMilestones = showMilestonesForRankForm
+      ? sortMilestones(
+          (rankForm.milestones || [])
+            .filter((m) => m.minHours !== "" && m.rate !== "")
+            .map((m) => ({
+              minHours: Number(m.minHours),
+              rate: Number(m.rate),
+            }))
+        )
+      : [];
 
     const nextRanks = {
       ...(payrollSettings?.ranks || {}),
@@ -833,67 +837,84 @@ export default function SettingsPage({ params }) {
               <div style={{ display: "grid", gap: 10 }}>
                 <div style={{ fontWeight: 600 }}>Milestones</div>
 
-                {(rankForm.milestones || []).length === 0 ? (
-                  <div style={{ fontSize: 13, color: "#6b7280" }}>
-                    No milestones added for this rank yet.
-                  </div>
-                ) : (
-                  rankForm.milestones.map((milestone, index) => (
-                    <div
-                      key={index}
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr auto",
-                        gap: 10,
-                        alignItems: "end",
-                      }}
-                    >
-                      <div style={{ display: "grid", gap: 6 }}>
-                        <label>Min Monthly Hours</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={milestone.minHours}
-                          onChange={(e) =>
-                            handleRankMilestoneChange(index, "minHours", e.target.value)
-                          }
-                        />
+                {showMilestonesForRankForm ? (
+                  <>
+                    {(rankForm.milestones || []).length === 0 ? (
+                      <div style={{ fontSize: 13, color: "#6b7280" }}>
+                        No milestones added for this rank yet.
                       </div>
+                    ) : (
+                      rankForm.milestones.map((milestone, index) => (
+                        <div
+                          key={index}
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "1fr 1fr auto",
+                            gap: 10,
+                            alignItems: "end",
+                          }}
+                        >
+                          <div style={{ display: "grid", gap: 6 }}>
+                            <label>Min Monthly Hours</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={milestone.minHours}
+                              onChange={(e) =>
+                                handleRankMilestoneChange(index, "minHours", e.target.value)
+                              }
+                            />
+                          </div>
 
-                      <div style={{ display: "grid", gap: 6 }}>
-                        <label>Hourly Rate</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={milestone.rate}
-                          onChange={(e) =>
-                            handleRankMilestoneChange(index, "rate", e.target.value)
-                          }
-                        />
-                      </div>
+                          <div style={{ display: "grid", gap: 6 }}>
+                            <label>Hourly Rate</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={milestone.rate}
+                              onChange={(e) =>
+                                handleRankMilestoneChange(index, "rate", e.target.value)
+                              }
+                            />
+                          </div>
 
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => handleRemoveMilestoneRow(index)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))
+                    )}
+
+                    <div>
                       <button
                         type="button"
                         className="btn btn-secondary"
-                        onClick={() => handleRemoveMilestoneRow(index)}
+                        onClick={handleAddMilestoneRow}
                       >
-                        Remove
+                        Add Milestone
                       </button>
                     </div>
-                  ))
-                )}
-
-                <div>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={handleAddMilestoneRow}
+                  </>
+                ) : (
+                  <div
+                    style={{
+                      fontSize: 13,
+                      color: "#64748b",
+                      background: "#f8fafc",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: 10,
+                      padding: 10,
+                    }}
                   >
-                    Add Milestone
-                  </button>
-                </div>
+                    Milestones are hidden in <strong>Rank Only</strong> mode.
+                  </div>
+                )}
               </div>
 
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -938,22 +959,65 @@ export default function SettingsPage({ params }) {
                     <div
                       key={rankId}
                       style={{
-                        border: "1px solid #e5e7eb",
+                        border: "1px solid #dbe1ea",
                         borderRadius: 14,
                         padding: 12,
                         display: "grid",
-                        gap: 8,
+                        gap: 10,
                         background: "#fff",
+                        boxShadow: "0 6px 14px rgba(15, 23, 42, 0.05)",
                       }}
                     >
-                      <div style={{ fontWeight: 800 }}>{rankId}</div>
-
-                      <div style={{ fontSize: 13, color: "#6b7280" }}>
-                        Base rate: {config.baseRate === "" ? "—" : `$${config.baseRate}/hr`}
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                        <div style={{ fontWeight: 800, textTransform: "capitalize" }}>{rankId}</div>
+                        <span
+                          style={{
+                            fontSize: 12,
+                            color: "#475569",
+                            background: "#f1f5f9",
+                            borderRadius: 999,
+                            padding: "3px 8px",
+                          }}
+                        >
+                          Base {config.baseRate === "" ? "—" : `$${config.baseRate}/hr`}
+                        </span>
                       </div>
 
-                      <div style={{ fontSize: 13, color: "#6b7280" }}>
-                        Milestones: {(config.milestones || []).length}
+                      <div style={{ display: "grid", gap: 6 }}>
+                        <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700, textTransform: "uppercase" }}>
+                          Milestone Progression
+                        </div>
+
+                        {(config.milestones || []).length === 0 ? (
+                          <div
+                            style={{
+                              fontSize: 13,
+                              color: "#64748b",
+                              background: "#f8fafc",
+                              border: "1px dashed #cbd5e1",
+                              borderRadius: 10,
+                              padding: "8px 10px",
+                            }}
+                          >
+                            No milestones configured.
+                          </div>
+                        ) : (
+                          sortMilestones(config.milestones || []).map((milestone) => (
+                            <div
+                              key={`${rankId}-${milestone.minHours}-${milestone.rate}`}
+                              style={{
+                                fontSize: 13,
+                                color: "#334155",
+                                background: "#f8fafc",
+                                border: "1px solid #e2e8f0",
+                                borderRadius: 10,
+                                padding: "7px 10px",
+                              }}
+                            >
+                              {milestone.minHours} hrs → ${milestone.rate}/hr
+                            </div>
+                          ))
+                        )}
                       </div>
 
                       <div style={{ display: "flex", gap: 8 }}>
@@ -1008,18 +1072,53 @@ export default function SettingsPage({ params }) {
 
             <div style={{ display: "grid", gap: 8 }}>
               <label style={{ fontWeight: 600 }}>Icon</label>
-              <select
-                value={shiftTypeForm.icon}
-                onChange={(e) =>
-                  setShiftTypeForm((prev) => ({ ...prev, icon: e.target.value }))
-                }
+              <div
+                style={{
+                  border: "1px solid #dbe1ea",
+                  borderRadius: 12,
+                  background: "#f8fafc",
+                  padding: 10,
+                  display: "grid",
+                  gap: 8,
+                }}
               >
-                {ICON_OPTIONS.map((icon) => (
-                  <option key={icon} value={icon}>
-                    {icon}
-                  </option>
-                ))}
-              </select>
+                <div style={{ fontSize: 12, color: "#64748b" }}>
+                  Selected: <span style={{ fontSize: 18 }}>{shiftTypeForm.icon}</span>
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(44px, 1fr))",
+                    gap: 8,
+                  }}
+                >
+                  {ICON_OPTIONS.map((icon) => {
+                    const isSelected = shiftTypeForm.icon === icon;
+                    return (
+                      <button
+                        key={icon}
+                        type="button"
+                        aria-label={`Select ${icon} icon`}
+                        onClick={() => setShiftTypeForm((prev) => ({ ...prev, icon }))}
+                        style={{
+                          height: 40,
+                          borderRadius: 10,
+                          border: isSelected ? "2px solid #2563eb" : "1px solid #cbd5e1",
+                          background: isSelected ? "#dbeafe" : "#ffffff",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: 20,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {icon}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
             <div style={{ display: "grid", gap: 8 }}>
@@ -1102,29 +1201,71 @@ export default function SettingsPage({ params }) {
                 <div
                   key={type.id}
                   style={{
-                    border: "1px solid #e5e7eb",
+                    border: "1px solid #dbe1ea",
                     borderRadius: 14,
                     padding: 12,
                     display: "grid",
-                    gap: 8,
+                    gap: 10,
                     background: "#fff",
+                    boxShadow: "0 6px 14px rgba(15, 23, 42, 0.05)",
                   }}
                 >
-                  <div style={{ fontWeight: 800 }}>
-                    {type.icon || "🧩"} {type.name}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span
+                      style={{
+                        width: 30,
+                        height: 30,
+                        borderRadius: 8,
+                        background: "#f1f5f9",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 18,
+                      }}
+                    >
+                      {type.icon || "🧩"}
+                    </span>
+                    <div style={{ fontWeight: 800 }}>{type.name}</div>
                   </div>
 
-                  <div style={{ fontSize: 13, color: "#6b7280" }}>
-                    Allowed ranks: {(type.allowedRanks || []).join(", ") || "—"}
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700, textTransform: "uppercase" }}>
+                      Allowed Ranks
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {(type.allowedRanks || []).length === 0 ? (
+                        <span style={{ fontSize: 13, color: "#64748b" }}>No rank restrictions</span>
+                      ) : (
+                        (type.allowedRanks || []).map((rank) => (
+                          <span
+                            key={`${type.id}-${rank}`}
+                            style={{
+                              fontSize: 12,
+                              color: "#334155",
+                              background: "#f1f5f9",
+                              border: "1px solid #dbe1ea",
+                              borderRadius: 999,
+                              padding: "2px 8px",
+                            }}
+                          >
+                            {rank}
+                          </span>
+                        ))
+                      )}
+                    </div>
                   </div>
 
-                  <div style={{ fontSize: 13, color: "#6b7280" }}>
-                    Override rates:{" "}
-                    {Object.keys(type.overrideRates || {}).length === 0
-                      ? "None"
-                      : Object.entries(type.overrideRates || {})
-                          .map(([rank, rate]) => `${rank}: $${rate}/hr`)
-                          .join(" • ")}
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700, textTransform: "uppercase" }}>
+                      Override Rates
+                    </div>
+                    <div style={{ fontSize: 13, color: "#475569" }}>
+                      {Object.keys(type.overrideRates || {}).length === 0
+                        ? "No override rates configured."
+                        : Object.entries(type.overrideRates || {})
+                            .map(([rank, rate]) => `${rank}: $${rate}/hr`)
+                            .join(" • ")}
+                    </div>
                   </div>
 
                   <div style={{ display: "flex", gap: 8 }}>
