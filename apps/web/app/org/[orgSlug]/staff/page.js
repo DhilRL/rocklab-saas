@@ -8,6 +8,7 @@ import {
   doc,
   getDocs,
   query,
+  updateDoc,
   where,
 } from "firebase/firestore";
 import { db } from "../../../../lib/firebase";
@@ -53,6 +54,7 @@ export default function StaffPage({ params }) {
   const [pendingInvites, setPendingInvites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [removingInviteId, setRemovingInviteId] = useState("");
+  const [savingRankMemberId, setSavingRankMemberId] = useState("");
 
   const loadStaffData = useCallback(async () => {
     setLoading(true);
@@ -104,6 +106,11 @@ export default function StaffPage({ params }) {
     loadStaffData();
   }, [orgSlug, loadStaffData]);
 
+  const rankOptions = useMemo(() => {
+    const rankKeys = Object.keys(org?.payrollSettings?.ranks || {});
+    return rankKeys.length ? rankKeys : ["cadet", "officer", "senior_officer", "captain"];
+  }, [org]);
+
   async function handleRemoveInvite(inviteId) {
     const confirmed = window.confirm("Remove this invite link?");
     if (!confirmed) return;
@@ -120,6 +127,25 @@ export default function StaffPage({ params }) {
     }
   }
 
+  async function handleAssignRank(memberId, nextRank) {
+    if (!memberId || !nextRank) return;
+
+    try {
+      setSavingRankMemberId(memberId);
+      await updateDoc(doc(db, "orgMembers", memberId), {
+        staffRank: nextRank,
+      });
+      setMembers((prev) =>
+        prev.map((item) => (item.id === memberId ? { ...item, staffRank: nextRank } : item))
+      );
+    } catch (error) {
+      console.error("Error updating staff rank:", error);
+      alert("Failed to update staff rank.");
+    } finally {
+      setSavingRankMemberId("");
+    }
+  }
+
   const unifiedRows = useMemo(() => {
     const inviteMapped = pendingInvites.map((invite) => ({
       rowType: "invite",
@@ -130,6 +156,7 @@ export default function StaffPage({ params }) {
       fullName: "",
       phone: "",
       createdAt: invite.createdAt || null,
+      staffRank: invite.staffRank || "",
     }));
 
     const memberMapped = members.map((member) => ({
@@ -141,6 +168,7 @@ export default function StaffPage({ params }) {
       fullName: member.fullName || "",
       phone: member.phone || "",
       createdAt: member.joinedAt || null,
+      staffRank: member.staffRank || "cadet",
     }));
 
     return [...inviteMapped, ...memberMapped].sort((a, b) => {
@@ -214,6 +242,7 @@ export default function StaffPage({ params }) {
                   <th>Email</th>
                   <th>Role</th>
                   <th>Status</th>
+                  <th>Rank</th>
                   <th>Full Name</th>
                   <th>Phone</th>
                   <th>Action</th>
@@ -226,6 +255,24 @@ export default function StaffPage({ params }) {
                     <td>{row.role || "staff"}</td>
                     <td>
                       <StatusBadge status={row.status} />
+                    </td>
+                    <td>
+                      {row.rowType === "member" ? (
+                        <select
+                          value={row.staffRank || "cadet"}
+                          onChange={(e) => handleAssignRank(row.id, e.target.value)}
+                          disabled={savingRankMemberId === row.id}
+                          style={{ minWidth: 140 }}
+                        >
+                          {rankOptions.map((rank) => (
+                            <option key={rank} value={rank}>
+                              {rank}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span style={{ color: "#9ca3af" }}>—</span>
+                      )}
                     </td>
                     <td>{row.fullName || "—"}</td>
                     <td>{row.phone || "—"}</td>
