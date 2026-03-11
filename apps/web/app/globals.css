@@ -1,4 +1,6 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
   --bg: #f8fafc;
@@ -391,4 +393,178 @@ textarea {
 .table .btn {
   padding: 8px 12px;
   border-radius: 10px;
+}
+/* ---------- LANDING PAGE ---------- */
+
+.landing-page {
+  min-height: 100vh;
+  padding: 36px clamp(20px, 4vw, 56px) 64px;
+  background: linear-gradient(180deg, #f8fafc 0%, #ecfeff 35%, #f8fafc 100%);
+}
+
+.landing-hero {
+  display: grid;
+  grid-template-columns: 1.25fr 0.75fr;
+  gap: 26px;
+  align-items: stretch;
+}
+
+.landing-hero h1 {
+  margin: 14px 0;
+  max-width: 900px;
+  font-size: clamp(2rem, 4.5vw, 3.8rem);
+  line-height: 1.05;
+}
+
+.landing-hero p {
+  max-width: 700px;
+  color: var(--muted);
+  line-height: 1.7;
+  font-size: 1.05rem;
+}
+
+.hero-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.btn-ghost {
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--text);
+}
+
+.hero-highlight {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+}
+
+.hero-highlight h3 {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+.hero-highlight ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 12px;
+  color: var(--muted);
+}
+
+.landing-section {
+  margin-top: 54px;
+}
+
+.section-header h2,
+.landing-section h2 {
+  margin: 0;
+  font-size: clamp(1.5rem, 2.3vw, 2.2rem);
+}
+
+.section-header p,
+.section-subtitle {
+  margin-top: 10px;
+  color: var(--muted);
+  max-width: 760px;
+  line-height: 1.7;
+}
+
+.testimonial-grid,
+.pricing-grid {
+  margin-top: 22px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.testimonial-card,
+.price-card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 20px;
+}
+
+.testimonial-card p {
+  margin-top: 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.testimonial-card h4 {
+  margin: 16px 0 4px;
+}
+
+.testimonial-card span {
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.price-card.featured {
+  border-color: #14b8a6;
+  box-shadow: 0 12px 32px rgba(20, 184, 166, 0.22);
+}
+
+.price {
+  margin-top: 12px;
+  font-size: 2rem;
+  font-weight: 800;
+}
+
+.price span {
+  font-size: 1rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.price-card ul {
+  margin: 16px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  display: grid;
+  gap: 10px;
+}
+
+.landing-cta {
+  margin-top: 60px;
+  text-align: center;
+  background: linear-gradient(135deg, #0f172a, #0f766e);
+  color: white;
+  border-radius: 24px;
+  padding: 48px 22px;
+}
+
+.landing-cta h2 {
+  margin: 0;
+}
+
+.landing-cta p {
+  max-width: 760px;
+  margin: 14px auto 26px;
+  color: rgba(255, 255, 255, 0.84);
+  line-height: 1.7;
+}
+
+@media (max-width: 1100px) {
+  .landing-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .testimonial-grid,
+  .pricing-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 740px) {
+  .testimonial-grid,
+  .pricing-grid {
+    grid-template-columns: 1fr;
+  }
 }
