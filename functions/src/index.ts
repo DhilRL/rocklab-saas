@@ -246,6 +246,8 @@ export const createShift = onCall({ cors: true }, async (request) => {
     assignedStaffNames = [],
     notes = "",
     color = "blue",
+    claimMode = "approval",
+    staffNeeded = 1,
   } = request.data;
 
   if (!orgId || !title || !startIso || !endIso) {
@@ -286,6 +288,8 @@ export const createShift = onCall({ cors: true }, async (request) => {
       : [],
     notes: String(notes || "").trim(),
     color: String(color || "blue"),
+    claimMode: claimMode === "instant" ? "instant" : "approval",
+    staffNeeded: Math.max(1, Number(staffNeeded || 1)),
     createdBy: auth.uid,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -309,6 +313,8 @@ export const updateShift = onCall({ cors: true }, async (request) => {
     assignedStaffNames = [],
     notes = "",
     color = "blue",
+    claimMode = "approval",
+    staffNeeded = 1,
   } = request.data;
 
   if (!shiftId || !orgId || !title || !startIso || !endIso) {
@@ -346,6 +352,8 @@ export const updateShift = onCall({ cors: true }, async (request) => {
       : [],
     notes: String(notes || "").trim(),
     color: String(color || "blue"),
+    claimMode: claimMode === "instant" ? "instant" : "approval",
+    staffNeeded: Math.max(1, Number(staffNeeded || 1)),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
@@ -393,15 +401,12 @@ export const duplicateShift = onCall({ cors: true }, async (request) => {
 
   await assertCanManageOrg(shift.orgId, auth.uid, auth.token.email);
 
-  const durationMs =
-    shift.end.toDate().getTime() - shift.start.toDate().getTime();
-
   const duplicatedStart = admin.firestore.Timestamp.fromDate(
-    new Date(shift.start.toDate().getTime() + 24 * 60 * 60 * 1000)
+    new Date(shift.start.toDate())
   );
 
   const duplicatedEnd = admin.firestore.Timestamp.fromDate(
-    new Date(duplicatedStart.toDate().getTime() + durationMs)
+    new Date(shift.end.toDate())
   );
 
   const newShiftRef = db.collection("orgShifts").doc();

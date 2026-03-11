@@ -72,12 +72,13 @@ function emptyForm(memberOptions = [], shiftTypes = []) {
   const firstShiftType = shiftTypes[0] || null;
 
   return {
-    title: "",
     shiftTypeId: firstShiftType?.id || "",
     date: toLocalDateInputValue(new Date()),
     startTime: "09:00",
     endTime: "17:00",
     isAvailable: true,
+    claimMode: "approval",
+    staffNeeded: 1,
     assignedMemberId: "",
     notes: "",
     memberOptions,
@@ -143,15 +144,6 @@ function ShiftModal({
           }}
         >
           <div style={{ display: "grid", gap: 6 }}>
-            <label style={{ fontWeight: 600 }}>Title</label>
-            <input
-              value={form.title}
-              onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
-              placeholder="e.g. Front Desk Morning"
-            />
-          </div>
-
-          <div style={{ display: "grid", gap: 6 }}>
             <label style={{ fontWeight: 600 }}>Shift Type</label>
             <select
               value={form.shiftTypeId}
@@ -164,6 +156,22 @@ function ShiftModal({
                 </option>
               ))}
             </select>
+          </div>
+
+          <div style={{ display: "grid", gap: 6 }}>
+            <label style={{ fontWeight: 600 }}>Staff Needed</label>
+            <input
+              type="number"
+              min={1}
+              max={10}
+              value={form.staffNeeded}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  staffNeeded: Math.max(1, Number(e.target.value || 1)),
+                }))
+              }
+            />
           </div>
 
           <div style={{ display: "grid", gap: 6 }}>
@@ -240,8 +248,28 @@ function ShiftModal({
                   }))
                 }
               />
-              Available shift
+              Open for bidding
             </label>
+          </div>
+
+          <div style={{ display: "grid", gap: 6 }}>
+            <label style={{ fontWeight: 600 }}>Claim type</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                className={form.claimMode === "approval" ? "btn btn-primary" : "btn btn-secondary"}
+                onClick={() => setForm((prev) => ({ ...prev, claimMode: "approval" }))}
+              >
+                Available (approval)
+              </button>
+              <button
+                type="button"
+                className={form.claimMode === "instant" ? "btn btn-primary" : "btn btn-secondary"}
+                onClick={() => setForm((prev) => ({ ...prev, claimMode: "instant" }))}
+              >
+                Instant claimable
+              </button>
+            </div>
           </div>
 
           <div style={{ gridColumn: "1 / -1", display: "grid", gap: 6 }}>
@@ -324,11 +352,12 @@ function emptyQuickAddTemplate(shiftTypes = []) {
 
   return {
     name: "Default Month Template",
-    title: firstShiftType?.name || "Open Shift",
     shiftTypeId: firstShiftType?.id || "",
     startTime: "09:00",
     endTime: "17:00",
     isAvailable: true,
+    claimMode: "approval",
+    staffNeeded: 1,
     weekdays: [1, 2, 3, 4, 5],
   };
 }
@@ -338,7 +367,8 @@ function QuickAddTemplateModal({
   template,
   setTemplate,
   onClose,
-  onApply,
+  onSave,
+  onSaveAndApply,
   saving,
   shiftTypes,
 }) {
@@ -381,9 +411,7 @@ function QuickAddTemplateModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h2 style={{ marginTop: 0 }}>Bulk Quick Add Template</h2>
-        <p style={{ marginTop: 4, color: "#6b7280" }}>
-          Save a named template and bulk-create shifts for the month you are viewing.
-        </p>
+        <p style={{ marginTop: 4, color: "#6b7280" }}>Save a named template you can reuse later.</p>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
           <div style={{ display: "grid", gap: 6, gridColumn: "1 / -1" }}>
@@ -392,14 +420,6 @@ function QuickAddTemplateModal({
               value={template.name}
               onChange={(e) => setTemplate((prev) => ({ ...prev, name: e.target.value }))}
               placeholder="e.g. Weekday Openers"
-            />
-          </div>
-
-          <div style={{ display: "grid", gap: 6 }}>
-            <label style={{ fontWeight: 600 }}>Shift Title</label>
-            <input
-              value={template.title}
-              onChange={(e) => setTemplate((prev) => ({ ...prev, title: e.target.value }))}
             />
           </div>
 
@@ -433,6 +453,19 @@ function QuickAddTemplateModal({
               type="time"
               value={template.endTime}
               onChange={(e) => setTemplate((prev) => ({ ...prev, endTime: e.target.value }))}
+            />
+          </div>
+
+          <div style={{ display: "grid", gap: 6 }}>
+            <label style={{ fontWeight: 600 }}>Staff Needed</label>
+            <input
+              type="number"
+              min={1}
+              max={10}
+              value={template.staffNeeded}
+              onChange={(e) =>
+                setTemplate((prev) => ({ ...prev, staffNeeded: Math.max(1, Number(e.target.value || 1)) }))
+              }
             />
           </div>
         </div>
@@ -482,15 +515,35 @@ function QuickAddTemplateModal({
             checked={template.isAvailable}
             onChange={(e) => setTemplate((prev) => ({ ...prev, isAvailable: e.target.checked }))}
           />
-          Create as available shifts
+          Open for bidding
         </label>
+
+        <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            className={template.claimMode === "approval" ? "btn btn-primary" : "btn btn-secondary"}
+            onClick={() => setTemplate((prev) => ({ ...prev, claimMode: "approval" }))}
+          >
+            Available (approval)
+          </button>
+          <button
+            type="button"
+            className={template.claimMode === "instant" ? "btn btn-primary" : "btn btn-secondary"}
+            onClick={() => setTemplate((prev) => ({ ...prev, claimMode: "instant" }))}
+          >
+            Instant claimable
+          </button>
+        </div>
 
         <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end", gap: 10 }}>
           <button className="btn btn-secondary" type="button" onClick={onClose} disabled={saving}>
             Cancel
           </button>
-          <button className="btn btn-primary" type="button" onClick={onApply} disabled={saving}>
-            {saving ? "Adding..." : "Save Template & Add to Month"}
+          <button className="btn btn-secondary" type="button" onClick={onSave} disabled={saving}>
+            Save Template Only
+          </button>
+          <button className="btn btn-primary" type="button" onClick={onSaveAndApply} disabled={saving}>
+            {saving ? "Saving..." : "Save & Add to Current Month"}
           </button>
         </div>
       </div>
@@ -514,6 +567,7 @@ export default function SchedulePage({ params }) {
   const [savingQuickAdd, setSavingQuickAdd] = useState(false);
   const [quickAddModalOpen, setQuickAddModalOpen] = useState(false);
   const [quickAddTemplate, setQuickAddTemplate] = useState(emptyQuickAddTemplate());
+  const [selectedTemplateName, setSelectedTemplateName] = useState("");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState("create");
@@ -589,7 +643,6 @@ export default function SchedulePage({ params }) {
         ...fallback,
         ...prev,
         shiftTypeId: prev.shiftTypeId || fallback.shiftTypeId,
-        title: prev.title || fallback.title,
       };
     });
     setUser(currentUser);
@@ -672,12 +725,13 @@ export default function SchedulePage({ params }) {
     setModalMode("edit");
     setSelectedShift(shift);
     setForm({
-      title: shift.title || "",
-      shiftTypeId: shift.shiftTypeId || "",
+      shiftTypeId: shift.shiftTypeId || shift.shiftType || "",
       date: toLocalDateInputValue(shift.start),
       startTime: toLocalTimeInputValue(shift.start),
       endTime: toLocalTimeInputValue(shift.end),
       isAvailable: !!shift.isAvailable,
+      claimMode: shift.claimMode || "approval",
+      staffNeeded: Number(shift.staffNeeded || 1),
       assignedMemberId: shift.assignedStaffIds?.[0] || "",
       notes: shift.notes || "",
       memberOptions: members,
@@ -687,12 +741,12 @@ export default function SchedulePage({ params }) {
   }
 
   function buildShiftPayload() {
-    const title = String(form.title || "").trim();
     const start = combineDateAndTime(form.date, form.startTime);
     const end = combineDateAndTime(form.date, form.endTime);
+    const shiftType = getShiftTypeById(shiftTypes, form.shiftTypeId);
+    const title = shiftType?.name || "Shift";
 
     if (!org?.id) throw new Error("Organization not loaded.");
-    if (!title) throw new Error("Please enter a shift title.");
     if (!form.shiftTypeId) throw new Error("Please select a shift type.");
     if (!start || !end) throw new Error("Please choose a valid date and time range.");
     if (end <= start) throw new Error("Shift end time must be after start time.");
@@ -713,6 +767,8 @@ export default function SchedulePage({ params }) {
         ? [assignedMember.nickname || assignedMember.fullName || assignedMember.email || "Staff"]
         : [],
       notes: String(form.notes || "").trim(),
+      claimMode: form.claimMode === "instant" ? "instant" : "approval",
+      staffNeeded: Math.max(1, Number(form.staffNeeded || 1)),
     };
   }
 
@@ -838,6 +894,8 @@ export default function SchedulePage({ params }) {
         assignedStaffIds: shift.assignedStaffIds || [],
         assignedStaffNames: shift.assignedStaffNames || [],
         notes: shift.notes || "",
+        claimMode: shift.claimMode || "approval",
+        staffNeeded: Number(shift.staffNeeded || 1),
       });
     } catch (err) {
       console.error(err);
@@ -880,23 +938,58 @@ export default function SchedulePage({ params }) {
     }
   }
 
-  async function handleQuickAddToMonth() {
-    if (!org?.id) return;
-
-    const title = String(quickAddTemplate.title || "").trim();
-    if (!title) {
-      alert("Add Quick needs a shift title.");
-      return;
+  async function saveQuickAddTemplate() {
+    if (!org?.id) return null;
+    const templateName = String(quickAddTemplate.name || "").trim();
+    if (!templateName) {
+      alert("Template name is required.");
+      return null;
     }
     if (!quickAddTemplate.shiftTypeId) {
       alert("Add Quick needs a shift type.");
-      return;
+      return null;
     }
-    if (!quickAddTemplate.startTime || !quickAddTemplate.endTime) {
+
+    const nextTemplate = {
+      ...quickAddTemplate,
+      name: templateName,
+      staffNeeded: Math.max(1, Number(quickAddTemplate.staffNeeded || 1)),
+      claimMode: quickAddTemplate.claimMode === "instant" ? "instant" : "approval",
+    };
+
+    const previousTemplates = Array.isArray(org.scheduleTemplates) ? org.scheduleTemplates : [];
+    const mergedTemplates = [
+      ...previousTemplates.filter((template) => template.name !== templateName),
+      nextTemplate,
+    ];
+
+    await updateDoc(doc(db, "orgs", org.id), {
+      scheduleTemplates: mergedTemplates,
+    });
+
+    setOrg((prev) => ({
+      ...prev,
+      scheduleTemplates: mergedTemplates,
+    }));
+    setSelectedTemplateName(templateName);
+    return nextTemplate;
+  }
+
+  async function handleQuickAddToMonth(templateInput = null) {
+    if (!org?.id) return;
+
+    const template = templateInput ||
+      (org.scheduleTemplates || []).find((row) => row.name === selectedTemplateName) ||
+      quickAddTemplate;
+
+    const shiftType = getShiftTypeById(shiftTypes, template.shiftTypeId);
+    const title = shiftType?.name || "Shift";
+
+    if (!template.startTime || !template.endTime) {
       alert("Add Quick needs a start and end time.");
       return;
     }
-    if (!quickAddTemplate.weekdays.length) {
+    if (!template.weekdays.length) {
       alert("Add Quick needs at least one weekday selected.");
       return;
     }
@@ -907,7 +1000,7 @@ export default function SchedulePage({ params }) {
     let cursor = new Date(monthStart);
 
     while (cursor <= monthEnd) {
-      if (quickAddTemplate.weekdays.includes(cursor.getDay())) {
+      if (template.weekdays.includes(cursor.getDay())) {
         daysToCreate.push(new Date(cursor));
       }
       cursor = addDays(cursor, 1);
@@ -925,11 +1018,11 @@ export default function SchedulePage({ params }) {
         daysToCreate.map(async (day) => {
           const start = combineDateAndTime(
             toLocalDateInputValue(day),
-            quickAddTemplate.startTime
+            template.startTime
           );
           const end = combineDateAndTime(
             toLocalDateInputValue(day),
-            quickAddTemplate.endTime
+            template.endTime
           );
 
           if (!start || !end || end <= start) return;
@@ -937,13 +1030,15 @@ export default function SchedulePage({ params }) {
           await createShiftFn({
             orgId: org.id,
             title,
-            shiftType: quickAddTemplate.shiftTypeId,
+            shiftType: template.shiftTypeId,
             startIso: start.toISOString(),
             endIso: end.toISOString(),
-            isAvailable: quickAddTemplate.isAvailable,
+            isAvailable: template.isAvailable,
             assignedStaffIds: [],
             assignedStaffNames: [],
-            notes: `Quick add template: ${String(quickAddTemplate.name || "Untitled template").trim()}`,
+            notes: `Quick add template: ${String(template.name || "Untitled template").trim()}`,
+            claimMode: template.claimMode === "instant" ? "instant" : "approval",
+            staffNeeded: Math.max(1, Number(template.staffNeeded || 1)),
           });
         })
       );
@@ -968,20 +1063,8 @@ export default function SchedulePage({ params }) {
 
   return (
     <>
-      <div className="topbar" style={{ marginBottom: 20 }}>
-        <div>
-          <h1>Schedule</h1>
-          <p>Organization: {org.name || orgSlug}</p>
-        </div>
-
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button className="btn btn-secondary" onClick={() => setAnchorDate(new Date())}>
-            Today
-          </button>
-        </div>
-      </div>
-
       <div style={{ marginBottom: 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <button className="btn btn-secondary" onClick={() => setAnchorDate(new Date())}>Today</button>
         <button className="btn btn-secondary" onClick={() => setAnchorDate(subMonths(anchorDate, 1))}>
           Previous
         </button>
@@ -1018,7 +1101,10 @@ export default function SchedulePage({ params }) {
         <div style={{ fontSize: 22, fontWeight: 800, marginLeft: 8 }}>{format(anchorDate, "MMMM yyyy")}</div>
 
         {canManageSchedule ? (
-          <button className="btn btn-secondary" onClick={handleToggleMonthBidding}>
+          <button
+            className={monthBiddingOpen ? "btn btn-primary" : "btn btn-secondary"}
+            onClick={handleToggleMonthBidding}
+          >
             {monthBiddingOpen ? "Close Bidding" : "Open Bidding"}
           </button>
         ) : null}
@@ -1031,6 +1117,28 @@ export default function SchedulePage({ params }) {
             <button className="btn btn-secondary" onClick={() => setQuickAddModalOpen(true)}>
               Bulk Template
             </button>
+            {(org.scheduleTemplates || []).length ? (
+              <>
+                <select
+                  value={selectedTemplateName}
+                  onChange={(e) => setSelectedTemplateName(e.target.value)}
+                >
+                  <option value="">Select template</option>
+                  {(org.scheduleTemplates || []).map((template) => (
+                    <option key={template.name} value={template.name}>
+                      {template.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => handleQuickAddToMonth()}
+                  disabled={!selectedTemplateName || savingQuickAdd}
+                >
+                  Apply Template to Month
+                </button>
+              </>
+            ) : null}
           </>
         ) : null}
 
@@ -1167,8 +1275,32 @@ export default function SchedulePage({ params }) {
                     </div>
 
                     <div style={{ display: "grid", gap: 6 }}>
-                      {dayShifts.map((shift) => {
+                      {Object.values(
+                        dayShifts.reduce((acc, shift) => {
+                          const key = `${format(shift.start, "HH:mm")}-${format(shift.end, "HH:mm")}`;
+                          acc[key] = acc[key] || [];
+                          acc[key].push(shift);
+                          return acc;
+                        }, {})
+                      ).map((timeGroup, groupIndex) => {
+                        const lanes = [];
+                        for (let index = 0; index < timeGroup.length; index += 4) {
+                          lanes.push(timeGroup.slice(index, index + 4));
+                        }
+
+                        return lanes.map((lane, laneIndex) => (
+                          <div
+                            key={`${day.toISOString()}-${groupIndex}-${laneIndex}`}
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: `repeat(${lane.length}, minmax(0, 1fr))`,
+                              gap: 6,
+                            }}
+                          >
+                            {lane.map((shift) => {
                         const shiftType = getShiftTypeById(shiftTypes, shift.shiftType || shift.shiftTypeId);
+                        const compactLevel = lane.length >= 3 ? "tight" : lane.length === 2 ? "compact" : "full";
+                        const isInstantClaimable = shift.claimMode === "instant";
 
                         return (
                           <div
@@ -1184,27 +1316,48 @@ export default function SchedulePage({ params }) {
                             style={{
                               padding: "8px 10px",
                               borderRadius: 12,
-                              border: `1px solid ${shift.isAvailable ? "#cbd5e1" : "#bfdbfe"}`,
-                              background: shift.isAvailable ? "#f8fafc" : "#eff6ff",
-                              color: shift.isAvailable ? "#475569" : "#1d4ed8",
+                              border: `1px solid ${isInstantClaimable ? "#fecaca" : shift.isAvailable ? "#cbd5e1" : "#bfdbfe"}`,
+                              background: isInstantClaimable ? "#fef2f2" : shift.isAvailable ? "#f8fafc" : "#eff6ff",
+                              color: isInstantClaimable ? "#b91c1c" : shift.isAvailable ? "#475569" : "#1d4ed8",
                               cursor: "pointer",
                               fontSize: 12,
+                              position: "relative",
                             }}
                           >
-                            <div style={{ fontWeight: 800 }}>{shift.title}</div>
+                            {isInstantClaimable ? (
+                              <div style={{ position: "absolute", top: 4, right: 6, fontSize: 12 }}>🚨</div>
+                            ) : null}
+                            {compactLevel !== "tight" ? (
+                              <div style={{ fontWeight: 800 }}>{shift.title}</div>
+                            ) : null}
                             <div>
-                              {format(shift.start, "h:mm a")} - {format(shift.end, "h:mm a")}
+                              {compactLevel === "tight"
+                                ? `${shiftType?.icon || "🧩"} ${format(shift.start, "h:mm a")}`
+                                : `${format(shift.start, "h:mm a")} - ${format(shift.end, "h:mm a")}`}
                             </div>
-                            <div style={{ opacity: 0.9 }}>
-                              {shiftType ? `${shiftType.icon || "🧩"} ${shiftType.name}` : "Shift"}
-                            </div>
-                            <div style={{ opacity: 0.9 }}>
-                              {shift.isAvailable
-                                ? "Available"
-                                : shift.assignedStaffNames?.[0] || "Assigned"}
-                            </div>
+                            {compactLevel === "full" ? (
+                              <>
+                                <div style={{ opacity: 0.9 }}>
+                                  {shiftType ? `${shiftType.icon || "🧩"} ${shiftType.name}` : "Shift"}
+                                </div>
+                                <div style={{ opacity: 0.9 }}>
+                                  {isInstantClaimable
+                                    ? "Instant Claimable"
+                                    : shift.isAvailable
+                                      ? "Available"
+                                      : shift.assignedStaffNames?.[0] || "Assigned"}
+                                </div>
+                              </>
+                            ) : (
+                              <div style={{ opacity: 0.9 }}>
+                                {isInstantClaimable ? "Instant Claimable" : `${shift.staffNeeded || 1} staff needed`}
+                              </div>
+                            )}
                           </div>
                         );
+                            })}
+                          </div>
+                        ));
                       })}
                     </div>
                   </div>
@@ -1254,8 +1407,8 @@ export default function SchedulePage({ params }) {
                       </td>
                       <td>{shift.title}</td>
                       <td>{shiftType ? `${shiftType.icon || "🧩"} ${shiftType.name}` : "—"}</td>
-                      <td>{shift.assignedStaffNames?.[0] || "—"}</td>
-                      <td>{shift.isAvailable ? "Available" : "Assigned"}</td>
+                      <td>{shift.assignedStaffNames?.join(", ") || `Needs ${shift.staffNeeded || 1}`}</td>
+                      <td>{shift.claimMode === "instant" ? "Instant Claimable" : shift.isAvailable ? "Available" : "Assigned"}</td>
                     </tr>
                   );
                 })
@@ -1282,7 +1435,32 @@ export default function SchedulePage({ params }) {
         template={quickAddTemplate}
         setTemplate={setQuickAddTemplate}
         onClose={() => setQuickAddModalOpen(false)}
-        onApply={handleQuickAddToMonth}
+        onSave={async () => {
+          try {
+            setSavingQuickAdd(true);
+            const saved = await saveQuickAddTemplate();
+            if (saved) setQuickAddModalOpen(false);
+          } catch (err) {
+            console.error(err);
+            alert(err?.message || "Failed to save template.");
+          } finally {
+            setSavingQuickAdd(false);
+          }
+        }}
+        onSaveAndApply={async () => {
+          try {
+            setSavingQuickAdd(true);
+            const saved = await saveQuickAddTemplate();
+            if (!saved) return;
+            await handleQuickAddToMonth(saved);
+            setQuickAddModalOpen(false);
+          } catch (err) {
+            console.error(err);
+            alert(err?.message || "Failed to save and apply template.");
+          } finally {
+            setSavingQuickAdd(false);
+          }
+        }}
         saving={savingQuickAdd}
         shiftTypes={shiftTypes}
       />
