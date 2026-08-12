@@ -1,0 +1,12 @@
+{
+  "scripts": {
+    "dev": "npm run dev --prefix coach-portal",
+    "build": "npm run build --prefix coach-portal",
+    "preview": "npm run preview --prefix coach-portal",
+    "lint": "npm run lint --prefix coach-portal"
+  },
+  "dependencies": {
+    "canvas-confetti": "^1.9.4",
+    "react-easy-crop": "^5.5.7"
+  }
+}
